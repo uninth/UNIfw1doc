@@ -1,0 +1,2 @@
+# 
+*/15 * * * * root [ -x /var/opt/UNIfw1doc/bin/mkfwdoc ] && /var/opt/UNIfw1doc/bin/mkfwdoc

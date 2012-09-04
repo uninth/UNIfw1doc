@@ -1,0 +1,149 @@
+#!/bin/sh
+#
+# Copyright (c) 2012 UNI-C, NTH. All Rights Reserved
+#
+# TODO:
+#	det her er et skod-script der udfører alt for mange ssh forbindelser mod
+#	remote host. Det burde laves om så data opsamles i én ssh forbindelsog
+#	processeres lokalt.
+#
+################################################################################
+#
+# Main
+#
+################################################################################
+
+RHOST=$1
+
+case $RHOST in
+	"")	SSH=""
+	;;
+	*)	SSH="ssh -qn $RHOST"
+	;;
+esac
+
+NOW=`${SSH} /bin/date`
+FQDN=`${SSH} hostname`
+
+case `${SSH} domainname` in
+	"")	FQDN=`${SSH} hostname`
+	;;
+	*)	FQDN=`${SSH} hostname`.`${SSH} domainname`
+	;;
+esac
+
+BASEPATH=/var/opt/UNIfw1doc
+ETCDIR=${BASEPATH}/etc
+HTMLHEAD=${ETCDIR}/htmlhead.txt
+
+ETH=`${SSH} ifconfig -a| sed "
+	/^[ 	]/d;
+	s/[ 	].*//
+	 /^$/d
+	/^lo/d
+	"`
+
+BG=0
+
+TITLE="IP and Network Configuration"
+
+cat $HTMLHEAD | sed "s/_TITLE_/$TITLE/g"
+cat << EOH
+<BODY>
+<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1"><TBODY><TR><TD>
+<H1>$TITLE</H1>
+<P>Data collected: $NOW<br>
+hostname: ${FQDN}</br>
+</P>
+<div class="unistyle">
+<table>
+<thead><tr>
+<th>Interface</th>
+<th>Network/Prefix</th>
+<th>Gateway</th>
+<th>Link</th>
+<th>Speed</th>
+<th>Duplex</th>
+</tr></thead>
+<tbody>
+EOH
+
+for E in $ETH
+do
+
+	${SSH} ifconfig $E | sed "/inet/!d; /inet6/d; s/.*addr://; s/[ 	].*ask:/	/ " | while read NET MASK
+	do
+
+		# eth2.xxx -> eth2
+		REAL_E=`echo $E |sed "s/\..*//"`
+ 
+		LINK=`${SSH} ethtool $REAL_E	| sed "/Link/!d; s/ detected//; s/^[ \t]*//;s/[ \t]*$//"`
+		SPEED=`${SSH} ethtool $REAL_E	| sed "/Speed/!d; s/\!.*$//; s/^[ \t]*//;s/[ \t]*$//"`
+		DUPLEX=`${SSH} ethtool $REAL_E	| sed "/Duplex/!d; s/\!.*$//; s/^[ \t]*//;s/[ \t]*$//"`
+
+		PREFIX=`ipcalc -p  $NET $MASK | sed "s/.*=//"`
+		#printf "| %10s | %16s/%s | %20s | %20s | %20s | %20s |\n" "${E}" "${NET}" "${PREFIX}" "n/a" "${LINK:="n/a"}" "${SPEED:="n/a"}" "${DUPLEX:="n/a"}"
+		echo "${E};${NET}/${PREFIX};n/a;${LINK:="n/a"};${SPEED:="n/a"};${DUPLEX:="n/a"}"
+
+		${SSH} netstat -rn | grep $E | awk  '
+			#$0 ~ /0.0.0.0/	{ next }
+					{ print $1 " " $3 " " $2 }
+					' | while read N M GW
+					do
+						P=`ipcalc -p $N $M | sed "s/.*=//"`
+						if [ "$GW" = "0.0.0.0" ]; then
+							: ignore kernel route
+						else
+							# printf "| %10s | %17s/%s | %20s | %20s | %20s | %20s |\n" "route" "${N}" "${P}" "${GW}" "n/a" "n/a" "n/a"
+							echo "route;${N}/${P};${GW};n/a;n/a;n/a"
+						fi
+
+					done
+	done
+done | gawk -F';' '
+	{
+		if (ALT == 0)
+		{
+			print "<tr>"
+			print "<td>" $1 "</a>"
+			print "<td>" $2 "</a>"
+			print "<td>" $3 "</a>"
+			print "<td>" $4 "</a>"
+			print "<td>" $5 "</a>"
+			print "<td>" $6 "</a>"
+			print "</td>"
+			ALT = 1
+			next
+		}
+		else
+		{
+			print "<tr class=\"alt\">"
+			print "<td>" $1 "</a>"
+			print "<td>" $2 "</a>"
+			print "<td>" $3 "</a>"
+			print "<td>" $4 "</a>"
+			print "<td>" $5 "</a>"
+			print "<td>" $6 "</a>"
+			print "</td>"
+			print "</td>"
+			ALT = 0
+			next
+		}
+	}
+'
+
+cat << EOF
+</tbody>
+</table>
+</div>
+<H1>General information</H1>
+Please notice
+<ul>
+<li>The information is made by a program. Programs have errors, so will this report. No-one checked it</br>
+<li>This is not a full documentation of your Check Point firewall configuration. All the interesting blades are missing. Blame Check Point</br>
+<li>The route tables does not cover IPv6, TAP and TUN interfaces</br>
+</ul>
+<DIV CLASS="copyright"><BR></DIV>
+</body>
+</html>
+EOF

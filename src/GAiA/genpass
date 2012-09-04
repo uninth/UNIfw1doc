@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# Copyright (c) 2012 UNI-C, NTH. All Rights Reserved
+#
+
+genpasswd() {
+	local l=$1
+		[ "$l" == "" ] && l=20
+		tr -dc A-Za-z0-9_ < /dev/urandom | head -c ${l} | xargs
+}
+
+# this is better but may produce non-accepted passwords
+# openssl rand -base64 ${1} | cut -c 1-8
+
+genpasswd $*

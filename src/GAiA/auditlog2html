@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# P.t. MEGET simpelt
+#
+INITIAL="Jan 01, 1970 00:00:00"
+FROM="`cat /var/opt/UNIfw1doc/etc/adtlog_last_check_time`"
+
+cat << END_OF_TABLE_HEADER
+<table summary="auditlog" style="border:0px;">
+END_OF_TABLE_HEADER
+
+# fw log -n -s "$FROM" $FWDIR/log/fw.adtlog |
+	awk -F';' '
+	/^$|Log In|Log Out/ { next; }
+	{
+		gsub("=>", "", $0)
+		gsub(">", "\\&gt;", $0)
+		gsub("<", "\\&lt;", $0)
+		gsub(/Uid: \{[-A-Za-z0-9]*\};/, "");
+
+		if ($0 ~ /Date/ ) {
+			print "<tr valign=top><td class=auditdate>" $0 "</td></tr>" ;
+		} else {
+			print "<tr valign=top><td>" $0 "</td></tr>" ;
+		}
+	}
+	'
+cat << END_OF_TABLE_FOOTER
+</table>
+<p><b>Notice the table</b> is a <em>selection</em>; entries regarding login/logout and some
+fields has been removed.</p>
+END_OF_TABLE_FOOTER
+
+
+
+exit 0
+
+14:18:25 accept 172.16.0.1 <    ObjectName: gatekeeper; ObjectType: dtps_application; ObjectTable: applications; Operation: Install Policy; Uid: {4AB6B274-82A6-11DA-80AF-00000000C3C3}; Administrator: nie; Machine: FWGUI; Subject: Policy Installation; Audit Status: Success; Additional Info: Desktop Policy : default; Operation Number: 7; product: SmartDashboard;
+
+# Default delimiter is ':' after field name and ';' after field value.

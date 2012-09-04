@@ -1,0 +1,708 @@
+#!/bin/sh
+#
+# $Header: /lan/ssi/shared/software/internal/UNIfw1doc/src/GaIA/mkfwdoc,v 1.10 2016/05/02 20:31:00 root Exp $
+#
+# TODO
+#	* error handling code 255 (CP) on errors displayed in HTML
+#	* clean-up
+
+#
+# Functions
+#
+logit() {
+# purpose     : Timestamp output
+# arguments   : Line og stream
+# return value: None
+# see also    :
+	LOGIT_NOW="`/bin/date '+%H:%M:%S (%d/%m)'`"
+	STRING="$*"
+
+	if [ -n "${STRING}" ]; then
+		$echo "${LOGIT_NOW} ${STRING}" >> ${MY_LOGFILE}
+		if [ "${VERBOSE}" = "TRUE" ]; then
+			$echo "${LOGIT_NOW} ${STRING}"
+		fi
+	else
+		while read LINE
+		do
+			if [ -n "${LINE}" ]; then
+				$echo "${LOGIT_NOW} ${LINE}" >> ${MY_LOGFILE}
+				if [ "${VERBOSE}" = "TRUE" ]; then
+					$echo "${LOGIT_NOW} ${LINE}"
+				fi
+			else
+				$echo "" >> ${MY_LOGFILE}
+			fi
+		done
+	fi
+}
+
+function mkglobal_index()
+{
+
+logit "creating $HTML/index.html ... "
+cd $HTML
+
+INDEX=index.html
+
+logit "DEBUG: pwd: `pwd`, check if /xsl/index.xml exists, if not use /index.html"
+
+TITLE="Automagic Check Point firewall documentation"
+(
+cat $HTMLHEAD | sed "s/_TITLE_/$TITLE/g"
+cat << EOH
+<BODY>
+<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1"><TBODY><TR><TD>
+<H1>$TITLE</H1>
+</P>
+<div class="unistyle">
+<table>
+<thead><tr>
+<th>Firewall configuration</th>
+<th>Enforcement module status</th>
+<th>Audit log</th>
+</tr></thead>
+<tbody>
+EOH
+
+find .  -maxdepth 1 -type d | sort -nr | gawk '
+	BEGIN {
+		split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec",month)
+		for (i in month) {
+			month_nums[month[i]]=i
+		}
+		GW  = "'${GW}'"
+		ALT = 0 ;
+
+		# CPrules creates an index.html, while cp_webviz_tool creates /xsl/index.xml
+		# so check if /xsl/index.xml exists and use that, or else use index.html
+		# INDEX = "/xsl/index.xml"
+		# FILE = sprintf("%s/%s", $0, INDEX )
+		# if( system("[ ! -f " FILE " ]") == 0)
+		# {
+		# 	# this is ugly, as there may be a rulebase.html for each installed policy ...
+		# 	# e.g. Standard/rulebase.html and default/rulebase.html and ... i.e. this
+		# 	# gives too much data for awk:
+		# 	# ( "echo  */*/rulebase.html" |  getline files ) ; close("echo")
+
+		# 	# so, instead we will fix it later for directories with no /xsl/index.xml
+		# 	# and create a valid index.html
+		# 	INDEX = "/index.html"
+		# 	print "FILE = " FILE " not found"
+		# }
+		# else
+		# {
+		# 	print "FILE = " FILE " found"
+		# }
+	}
+	{
+		sub(/^\.\//, "", $0)
+
+		if ($0 !~ /^20/) { next; }
+
+		split($0,a,"-");		# split str on _
+		sub(/^[0-0]/, "", a[2])		# remove leading '0'
+		sub(/.tar.gz/, "", a[4]);
+		gsub(/-/, ":", a[4]);
+		yy = a[1]
+		mm = month[a[2]]
+		dd = a[3]
+		#time = a[4]
+		time =  substr (a[4], 0, 2) ":" substr (a[4], 3, 4)
+		line = "Configuration on " mm " " dd " " time " " yy
+
+
+		if (ALT == 0)
+		{
+			print "<tr>"
+			print "<td><a href=\"" $0 "/index.html \">" line "</a></td>"
+			print "<td><a href=\"" $0 "/fwstatus.html\">Enforcement module status</a></td>"
+			print "<td><a href=\"" $0 "/auditlog.html\">Audit information</a>"
+			print "</td>"
+			ALT = 1
+			next
+		}
+		else
+		{
+			print "<tr class=\"alt\">"
+			print "<td><a href=\"" $0 "/index.html \">" line "</a></td>"
+			print "<td><a href=\"" $0 "/fwstatus.html\">Enforcement module status</a></td>"
+			print "<td><a href=\"" $0 "/auditlog.html\">Audit information</a>"
+			print "</td>"
+			ALT = 0
+			next
+		}
+	}
+'
+
+
+cat << EOF
+</tbody>
+</table>
+</div>
+<H1>General information</H1>
+Please notice
+<ul>
+<li>The firewall documentation is made with an application from Check Point and covers only the firewall policy, NAT blade and the used objects.</br>
+<li>The route tables does not cover IPv6, TAP and TUN interfaces on the enforcement module status. This will change in the future.</br>
+<li>The icons in the fireall documentation does not show up when using Safari; it does when using Firefox, IE and Chrome.</br>
+</ul>
+<P>
+</body>
+</html>
+EOF
+) > $INDEX
+	chmod -R 444 $INDEX
+
+	# now fix documentation made with CPrules here ...
+cd $HTML
+# find second level dir
+find *  -maxdepth 0 -type d | sed '/img/d; /tmp/d; /css/d; /icons/d; /scripts/d' | while read DIR
+do
+	INDEX="$HTML/$DIR/index.html"
+	XLS_FOUND="`find ${DIR} -name xsl -type d|wc -l | tr -d ' '`"
+	if [ "${XLS_FOUND}" -gt 0 ]; then
+		logit "${DIR}/xsl/index.xml found"
+			cat $HTMLHEAD |sed "s/_TITLE_/Rulebases/" > $INDEX
+			cat <<-'EOF'|sed "s/_DIR_/${DIR}/g"  >> $INDEX
+			<BODY>
+			<H2>Firewall rulebases</H2>
+			<div class="unistyle">
+			<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1">
+			<thead><tr>
+			<TH ALIGN="left" >Rulebase</TH>
+			</thead><tbody><tr>
+			<TD><a href="xsl/index.xml">Policy</a></TD></tr>
+			</TBODY></TABLE></DIV></BODY></HTML>
+EOF
+	else
+		logit "${DIR}/xsl/index.xml NOT found "
+		FOUND="`find ${DIR} -name rulebase.html|wc -l | tr -d ' '`"
+		case ${FOUND} in
+		0)	logit "$DIR ignored, not a rule export dir"
+		;;
+		*)
+			cat $HTMLHEAD |sed "s/_TITLE_/Rulebases/" > $INDEX
+			cat <<-'EOF'  >> $INDEX
+			<BODY>
+			<H2>Firewall rulebases</H2>
+			<div class="unistyle">
+			<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1">
+			<thead><tr>
+			<TH ALIGN="left" >Rulebase</TH>
+			</thead><tbody><tr>
+EOF
+			(cd $DIR; find * -name rulebase.html ) | sed 's/ /\n/g' | while read L
+			do
+				R="`dirname $L`"
+				echo "<TD><a href=\"$L\"> $R </a></TD></tr>" >> $INDEX
+			done
+			echo " </TBODY></TABLE></DIV></BODY></HTML>" >> $INDEX
+		;;
+		esac
+	fi
+done
+
+}
+
+function buid_new_documentation()
+{
+	# Read the auditlog from last end
+	ADT_CHECK_TIME_LAST=`cat ${LAST_CHECK_FILE}`
+	NOW=`/bin/date +%Y-%m-%d-%H%M`			# now
+
+	MY_HTMLDIR=${HTML}/${NOW}			# sort of a html root dir
+	if [ ! -d "${MY_HTMLDIR}" ]; then
+		/bin/mkdir -p ${MY_HTMLDIR}
+		logit "made new html dir ${MY_HTMLDIR}"
+	else
+		logit "found ${MY_HTMLDIR}"
+	fi
+
+	case $TOOL in
+		"cp_webviz_tool")
+
+			/bin/cp -r $VANILLA ${MY_HTMLDIR}	# copy default / template files to here
+
+			RULEBASEDIR=${MY_HTMLDIR}/xsl/xml	# Rulebase here
+			/bin/mkdir -p $RULEBASEDIR
+			SMARTCENTER_SERVER=127.0.0.1		# run on localhost
+			cd $RUNDIR				# make clean-up more easy
+			# usage and download: see sk64501
+			logit "in `pwd`:"
+			logit "running $CPDB2WEB -s ${SMARTCENTER_SERVER} -u ${ADMIN} -p ${ADMPW} -o ${RULEBASEDIR} -w ${BINPATH} > ${TMPFILE} 2>&1 ... "
+			$CPDB2WEB -s ${SMARTCENTER_SERVER} -u ${ADMIN} -p ${ADMPW} -o ${RULEBASEDIR} -w ${BINPATH} > ${TMPFILE} 2>&1
+			EXITSTATUS=$?
+			col -bf < ${TMPFILE} | logit
+			logit "exit status: $EXITSTATUS"
+			logit "done"
+			case $EXITSTATUS in
+				0)	: # ok
+				;;
+				*)	WARNING="$CPDB2WEB failed (gui running?)"
+				;;
+			esac
+		;;
+		"CPrules")
+
+		OUTPUT_DIR=$MY_HTMLDIR
+		CPRULES="${BASEPATH}/CPrules"
+
+		IMGDIR=${HTML}/img
+		test -d ${TMPDIR} || mkdir ${TMPDIR}
+
+		if [ -f ${ETCDIR}/client_logo.jpg ]; then
+			/bin/cp	${ETCDIR}/client_logo.jpg ${IMGDIR}
+		fi
+		if [ -f ${ETCDIR}/${ETCDIR}/your_logo.png ]; then
+			/bin/cp	${ETCDIR}/your_logo.png ${IMGDIR}
+		fi
+		/bin/rm -f $MY_LOGFILE
+
+		for FILE in $CF
+		do
+			/bin/cp $CF ${TMPDIR}
+			logit "copy $FILE ${TMPDIR} "
+		done
+
+		# Build documentation for the current rulebases and objects in a clean
+		# directory, so we have to prepare CPrulses with a ini-file where the
+		# directory is the new one.
+		cd ${CPRULES}
+		cat CPrules.ini.org | sed "
+			s%^HTMLPath.*=.*%HTMLPath=${OUTPUT_DIR}%g
+			s%^MainLogo.*%MainLogo=/img/i2.png%
+			s%^FW1Users.*%; FW1Users=${TMPDIR}/users.C%
+			s%^FW1Rules=.*%FW1Rules=${TMPDIR}/rulebases_5_0.fws%
+			s%^FW1Objects=.*%FW1Objects=${TMPDIR}/objects_5_0.C%
+			s%^FW1SLPrules=.*%FW1SLPrules=${TMPDIR}/slprulebases_5_0.fws%
+			s%.*EXP_Users.*=.*%EXP_Users=${TMPDIR}/users.exp%
+			s%.*EXP_Groups.*=.*%EXP_Groups=${TMPDIR}/groups.exp%
+			s%^Logo.*%Logo=/img/client_logo.jpg%
+		" > CPrules.ini
+		(
+			for FILE in users.C users.exp groups.exp
+			do
+				/bin/rm -f ${TMPDIR}/$FILE
+			done
+		)
+
+		echo "copy vanilla HTML to ${OUTPUT_DIR} ... "
+		/bin/cp -r HTML.vanilla/* ${OUTPUT_DIR}/
+
+		#
+		# Read the configuration
+		#
+		echo "running fwm dbexport ... "
+		fwm dbexport -f     ${TMPDIR}/users.exp
+		fwm dbexport -g -f ${TMPDIR}/groups.exp
+
+		perl ./CPrules.pl 2>&1
+
+		chmod 444 `find $OUTPUT_DIR -type f`
+		chmod 555 `find $OUTPUT_DIR -type d`
+
+
+		#
+		# END CPrules
+		#
+		;;
+	esac
+
+	INDEX_HTML=${MY_HTMLDIR}/index.html
+
+	# rulebase in 2015-06-12-1656/xsl/index.xml
+	# route info for each enforcement modules in route-${GW}.html
+
+	# firewall / enforcement module : fw stat / rulebasename / install date
+	# firewall / enforcement module : route information
+	cat $HTMLHEAD | sed "s/_TITLE_/$TITLE/g" > "${MY_HTMLDIR}/fwstatus.html"
+
+cat << EOF >> "${MY_HTMLDIR}/fwstatus.html"
+<BODY>
+<H1>Firewall information</H1><br/>
+<div class="unistyle">
+<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1">
+<thead><tr>
+<th>Hostname</th>
+<th>IP Routing</th>
+<th>Policy name</th>
+<th>Installation time</th>
+<th>Firewall version</th>
+<th>Module status</th>
+</tr></thead>
+<tbody>
+EOF
+
+	cat ${ETCDIR}/enforcement_modules.lst | sed '/^#/d; /^$/d' | while read GW
+	do
+		case $GW in
+			127.0.0.1|localhost)
+				: echo is localhost will not use ssh ...
+				logit "reading route on localhost '${GW}' ... "
+				${ipropr} > ${MY_HTMLDIR}/route-${GW}.html 2>/dev/null
+				logit "reading fw info on '${GW}' ... "
+				/bin/cpfw_start stat | awk 'BEGIN { gw = "'${GW}'" } $1 == "HOST" { next } { printf("%s;%s;%s %s\n", gw, $2, $3, $4) }' > ${TMPDIR}/${GW}-stat.txt
+				FWVER=`/bin/cpfw_start ver`
+				CPHASTAT=`/bin/cphaprob_start stat`
+			;;
+			*)	# mode etc on .ssh/* hostname known etc
+				logit "reading route on '${GW}' ... "
+				#echo "${ipropr}" |ssh -qT ${GW} > ${MY_HTMLDIR}/route-${GW}.html 2>/dev/null
+				${ipropr} ${GW} > ${MY_HTMLDIR}/route-${GW}.html 2>/dev/null
+				# case $? in ... 0 : ok, 255/* fail
+				logit "reading fw info on '${GW}' ... "
+				echo "/bin/cpfw_start stat"| ssh -qT ${GW} | awk 'BEGIN { gw = "'${GW}'" } $1 == "HOST" { next } { printf("%s;%s;%s %s\n", gw, $2, $3, $4) }' > ${TMPDIR}/${GW}-stat.txt
+				FWVER=`echo "/bin/cpfw_start ver" | ssh -qT ${GW}`
+				CPHASTAT=`echo "/bin/cphaprob_start stat" | ssh -qT ${GW}`
+			;;
+		esac
+
+		FWPOLICY=`awk -F';' '{ print $2 }' ${TMPDIR}/${GW}-stat.txt`
+		INSTALLTIME=`awk -F';' '{ print $3 " " $4 }' ${TMPDIR}/${GW}-stat.txt`
+		cat << EOF >> "${MY_HTMLDIR}/fwstatus.html"
+<tr>
+<td>$GW</td>
+<td><a href="route-${GW}.html">IP route</a></td>
+<td>$FWPOLICY</td>
+<td>$INSTALLTIME</td>
+<td>$FWVER</td>
+<td><pre>$CPHASTAT</pre></td>
+</tr>
+EOF
+	done
+
+	logit "${ETCDIR}/enforcement_modules.lst done"
+
+	cat << EOF >> "${MY_HTMLDIR}/fwstatus.html"
+</tbody>
+</table>
+</div>
+</body>
+</html>
+EOF
+
+	#
+	# Audit
+	#
+	AUDITHTML="${MY_HTMLDIR}/auditlog.html"
+
+	logit "Writing audit info to $AUDITHTML ... "
+
+	if [ -f "${AUDITHTML}" ]; then
+		echo $AUDITHTML exists, bye
+		exit 0
+	fi
+
+	export AUDIT_DAY=`/bin/date +%e%b%Y | sed 's/^ *//g'`
+
+	TMPAUDIT=/tmp/auditlog.txt
+
+	fwm logexport -d \| -i $FWDIR/log/fw.adtlog > $TMPAUDIT 2>/dev/null
+
+	# awk -F'|' '$2 == "'${AUDIT_DAY}'" { print $2 ";" $3 ";" $11 ";" $12 ";" $13 ";" $14 ";" $16 ";" $17 ";" $18 ";" $20 ";" $21 ";" $22 }' ${TMPAUDIT}
+
+	TITLE="Auditlog for changes made $AUDIT_DAY"
+
+	cat $HTMLHEAD | sed "s/_TITLE_/$TITLE/g" > $AUDITHTML
+
+cat << EOF >> $AUDITHTML
+	<H1>$TITLE - $AUDIT_DAY</H1>
+	<P>The audit log begins as 00:00 on $AUDIT_DAY. All changes made today is shown below.</P>
+	<div class="unistyle">
+	<TABLE FRAME="VOID" CELLSPACING="1" COLS="1" RULES="NONE" BORDER="1">
+        <thead>
+            <TR>
+                <TH ALIGN="left" >Date</TH>
+                <TH ALIGN="right">Time </TH> 
+                <TH ALIGN="left">ObjectName </TH>
+                <TH ALIGN="left">ObjectType</TH>
+                <TH ALIGN="left">ObjectTable</TH>
+                <TH ALIGN="left">Operation</TH>
+                <TH ALIGN="left">Administrator</TH>
+                <TH ALIGN="left">Machine</TH>
+                <TH ALIGN="left">FieldsChanges</TH>
+                <TH ALIGN="left">Subject </TH>
+                <TH ALIGN="left">Audit Status/TH>
+                <TH ALIGN="left">Additional Info</TH>
+            </TR>
+	    </thead>
+	    <tbody>
+EOF
+
+	grep $AUDIT_DAY ${TMPAUDIT} | sort -nr |
+		awk -F'|' '
+			BEGIN {
+				BG = 0 ;
+				AUDIT_DAY = "'${AUDIT_DAY}'";
+			}
+			{
+			#	print $2 ";" $3 ";" $11 ";" $12 ";" $13 ";" $14 ";" $16 ";" $17 ";" $18 ";" $20 ";" $21 ";" $22
+
+				gsub(";", "<br />", $18); 
+
+				if (BG == 0) {
+					print "<TR>"
+					print "	<!-- foward -->"
+					print "    <TD ALIGN=\"left\">" $2 "</TD>"
+					print "    <TD ALIGN=\"right\">" $3 "</TD>"
+					print "    <TD ALIGN=\"left\">" $11 "</TD>"
+					print "    <TD ALIGN=\"left\">" $12 "</TD>"
+					print "    <TD ALIGN=\"left\">" $13 "</TD>"
+					print "    <TD ALIGN=\"left\">" $14 "</TD>"
+					print "    <TD ALIGN=\"left\">" $16 "</TD>"
+					print "    <TD ALIGN=\"left\">" $17 "</TD>"
+					print "    <TD ALIGN=\"left\">" $18 "</TD>"
+					print "    <TD ALIGN=\"left\">" $20 "</TD>"
+					print "    <TD ALIGN=\"left\">" $21 "</TD>"
+					print "    <TD ALIGN=\"left\">" $22 "</TD>"
+					print "</TR>"
+					BG = 1
+				} else {
+					print "<TR>"
+					print "	<!-- reverse -->"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $2 "</TD>"
+					print "    <TD ALIGN=\"right\" BGCOLOR=\"#E6E6E6\">" $3 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $11 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $12 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $13 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $14 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $16 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $17 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $18 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $20 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $21 "</TD>"
+					print "    <TD ALIGN=\"left\" BGCOLOR=\"#E6E6E6\">" $22 "</TD>"
+					print "</TR>"
+					BG = 0
+				}
+			}
+	' >> $AUDITHTML
+
+	cat << 'EOF' >> $AUDITHTML
+            </tbody>
+        </TABLE>
+	</div>
+   <P>Reading the table: If the <em>machine</em> is <code>localhost</code> or <em>the firewall object</em>, then the change(s) has not been done through the GUI, but may be something automatic taking place.</P>
+   <P>Please notice that this documentation is <em>not authoritative</em> and may contain error(s). Please consult the audit log available through the GUI logviewer in case of doubt or if the table above looks incomplete.</P>
+	<div class="copyright"> <br > </div>
+    </BODY>
+</HTML>
+EOF
+	logit "audit information saved"
+
+	#/bin/rm -f ${TMPAUDIT}
+	cd $DATA
+	find . -type d -exec chmod 0755 {} \;
+	find . -type f -exec chmod 0644 {} \;
+	logit "done"
+}
+
+################################################################################
+# Main
+################################################################################
+
+export LANG=C
+export LC_ALL=C
+export LC_CTYPE=C
+export LANGUAGE=C
+
+BASEPATH=/var/opt/UNIfw1doc
+ipropr=$BASEPATH/bin/ipropr
+
+TMPDIR=${BASEPATH}/tmp
+
+RUNDIR=${BASEPATH}/tmp/rundir			# Leave tmp ouput files somewhere
+test -d "${RUNDIR}" || {
+	/bin/mkdir -p ${RUNDIR}
+}
+
+MY_LOGFILE=${TMPDIR}/log
+TMPFILE=${TMPDIR}/tmpfile
+
+echo=/bin/echo
+case ${N}$C in
+	"") if $echo "\c" | grep c >/dev/null 2>&1; then
+		N='-n'
+	else
+		C='\c'
+	fi ;;
+esac
+
+# Script runs by cron so set up the admin environment
+for RC in $HOME/.profile $HOME/.bash_profile  $HOME/.bashrc /tmp/.CPprofile.sh
+do
+	if [ -f $RC ]; then
+		. $RC
+		logit ". $RC ... "
+	else
+		logit "$RC not found, ignored"
+
+	fi
+done
+
+#
+# Try gess if we should use cp_webviz_tool or CPrules
+#
+TOOL=cp_webviz_tool
+BINPATH=${BASEPATH}/cp_webviz_tool
+test -d "${BINPATH}" || {
+	BINPATH=${BASEPATH}/CPrules
+	test -d BINPATH || {
+		echo "cannot find cp_webviz_tool or CPrules, see documentation, bye"
+		exit 1
+	}
+	TOOL=CPrules
+}
+
+logit "Using $TOOL to create documentation"
+
+ETCDIR=${BASEPATH}/etc
+test -d "${ETCDIR}" || {
+	/bin/mkdir -p ${ETCDIR}
+}
+
+PREFS=${ETCDIR}/mkfwdoc.prefs
+test -f ${PREFS} || {
+	echo "$PREFS not found, bye"
+	exit 0
+}
+
+FIREWALL_LIST=${ETCDIR}/enforcement_modules.lst
+test -f ${FIREWALL_LIST} || {
+	echo "$FIREWALL_LIST not found - see installation documentation"
+	echo "One enforcement module name for each line (hostname/ipaddress)"
+	echo "Expecting SSH access to name as admin without password"
+	exit 0
+}
+. ${PREFS}
+
+test -n "${ADMIN}" || {
+	echo "ADMIN expected in ${PREFS} not found bye"
+	exit
+}
+test -n "${ADMPW}" || {
+	echo "ADMPW expected in ${PREFS} not found bye"
+	exit
+}
+
+HTMLHEAD=${ETCDIR}/htmlhead.txt
+test -f ${HTMLHEAD} || {
+	echo "$HTMLHEAD not found, bye"
+	exit 0
+}
+
+DATA=${BASEPATH}/data
+HTML=${BASEPATH}/data/html				# DocumentRoot
+logit "HTML dir: $HTML"
+
+CHECKSUMFILE=${ETCDIR}/fwrules.md5		# MD5 checksum files to avoid running if no changes to the rulebase.
+LAST_CHECK_FILE=${ETCDIR}/adtlog_last_check_time
+ADT_CHECK_TIME_NOW=`/bin/date '+%b %d, %Y %H:%M:00'`
+
+CONFIG_CHANGED="FALSE"
+
+# Monitored Check Point config files - re-build documentation on change
+CF="$FWDIR/conf/rulebases_5_0.fws $FWDIR/conf/objects_5_0.C $FWDIR/conf/slprulebases_5_0.fws $FWDIR/conf/objects.C $FWDIR/conf/sem_users.C"
+
+case $TOOL in
+	"cp_webviz_tool")
+		CPDB2WEB=$BINPATH/cpdb2web
+		if [ -x ${CPDB2WEB} ]; then
+			logit "cpdb2web is ${CPDB2WEB}"
+		else
+			echo "cpdb2web not found, bye"
+			exit 0
+		fi
+
+
+		VANILLA=${BASEPATH}/cp_webviz_tool/xsl	# copy from here
+		if [ ! -d "${VANILLA}" ]; then
+			echo "xsl dir '${VANILLA}' not found, bye"
+			exit 0
+		else
+			logit "found '${VANILLA}'"
+		fi
+	;;
+
+	"CPrules")
+	# TODO check CPrules installed, dir, exec and ini
+	;;
+esac
+
+#
+# all dirs etc found so process arguments
+#
+while getopts fhiv opt
+do
+case $opt in
+        v)      VERBOSE=TRUE
+        ;;
+	i)	mkglobal_index
+		exit 0
+	;;
+	f)	# re-make documentation
+		/bin/rm ${CHECKSUMFILE}
+		:
+		;;
+	h)	echo "usage: $0 [-h|-i|-v]"
+		echo "	-h: help"
+		echo "	-v: verbose"
+		echo "	-i: re-build main index file"
+		echo "	-f: force build documentation"
+		exit 0
+	;;
+esac
+done
+shift `expr $OPTIND - 1`
+
+#
+# Check if changes was made
+#
+if [ ! -f "${CHECKSUMFILE}" ]; then
+	# first time run
+	# Make md5sum files
+	logit "initializing ${CHECKSUMFILE}"
+	logit "building new documentation ... "
+	buid_new_documentation
+	logit "making index html ... "
+	mkglobal_index
+	logit "re-initializing ${CHECKSUMFILE}"
+	md5sum --binary $CF > ${CHECKSUMFILE}
+fi
+
+if [ ! -f "${LAST_CHECK_FILE}" ]; then
+	logit "initializing new last check file - ${LAST_CHECK_FILE}"
+	ADT_CHECK_TIME_LAST="Never"
+	echo ${ADT_CHECK_TIME_NOW} > ${LAST_CHECK_FILE}
+fi
+
+/bin/rm -fr $RUNDIR && mkdir -p $RUNDIR		# wipe tmpdir && re-create empty one
+
+exit 0
+
+#
+# Check rute? Check fw stat date??
+#
+
+#
+# Check if changes was made, stop if not
+#
+md5sum --check --warn ${CHECKSUMFILE} > ${TMPFILE} 2>&1;
+EXIT_STATUS=$?
+logit < ${CHECKSUMFILE}
+logit < ${TMPFILE}
+if [ ${EXIT_STATUS} -eq 0 ]; then
+	logit "no changes, bye"
+	exit 0
+else
+	logit "changes detected, building new documentation"
+
+	buid_new_documentation
+	mkglobal_index
+	logit "re-initializing ${CHECKSUMFILE}"
+	md5sum --binary $CF > ${CHECKSUMFILE}
+fi
+
+/bin/rm -fr $RUNDIR && mkdir -p $RUNDIR		# wipe tmpdir && re-create empty one
+

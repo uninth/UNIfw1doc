@@ -1,0 +1,132 @@
+<!doctype html public "-//W3C//DTD HTML 4.0 Transitional //EN">
+<html>
+<head>
+  <meta name="GENERATOR" content="mkd2html 2.1.8 DL=DISCOUNT">
+  <meta http-equiv="Content-Type"
+        content="text/html; charset=utf-8">  <link rel="stylesheet"
+        type="text/css"
+        href="assets/CSS/i2-Book.css" />
+</head>
+<body>
+<h1>Introduction</h1>
+
+<p><strong>UNIfw1doc</strong> - <em>UNI•C FireWall-1 automated documentation tool</em> - is a simple
+automated firewall documentation tool for Check Point firewall-1 made by UNI•C.</p>
+
+<p><strong>UNIfw1doc</strong> version 1.0 is compatible with
+<a href="http://en.wikipedia.org/wiki/Check_Point_VPN-1">GAiA</a> and has been tested on
+Check Point R77.10, R77.20 and R77.30, and should work with all later R77.x
+versions, both appliances and open servers.</p>
+
+<p><strong>UNIfw1doc</strong> should be installed on the management station. It uses Check
+Point&rsquo;s Web visualization tool (SK64501) and a number of other utilities.</p>
+
+<p><strong>UNIfw1doc</strong> is free software and released under a
+<a href="https://opensource.org/licenses/BSD-3-Clause">modified BSD License</a>, see LICENSE. Using the
+software requires a valid support contract with <a href="http://www.checkpoint.com">Check Point Technologies</a>.
+<strong>UNIfw1doc</strong> is installed as an <a href="http://en.wikipedia.org/wiki/RPM_Package_Manager">rpm package</a>.</p>
+
+<p><strong>UNIfw1doc</strong> requires an application to render the Check Point configuration, and
+works with both <em>cpdb2web</em> from Check Point and <em>CPrules</em>. Either has to be installed
+separately, as described in the installation documentation.</p>
+
+<p>Check Point <strong>cpdb2web</strong> may be download from
+<a href="https://supportcenter.checkpoint.com">supportcenter.checkpoint.com</a>, search
+for <strong>sk64501</strong> and download <em>R77.x for Gaia / SecurePlatform / Linux</em>.</p>
+
+<p>cpdb2web does not require a separate license, but may fail to execute if an GUI is open.</p>
+
+<p>Create the directory <code>/var/opt/UNIfw1doc/cp_webviz_tool</code>, unpack the archive
+there with <code>tar xvfpz cpdb2web*gz</code>.</p>
+
+<p><em>Notice the documentation created with cpdb2web requires Firefow for best viewing.</em> (not html but xml files)</p>
+
+<p><strong>CPrules</strong> may be downloaded from <a href="http://www.wormnet.nl/download/CPRules.tar.gz">here</a>
+Create the directory <code>/var/opt/UNIfw1doc/CPrules</code>, unpack CPRules.tar.gz and move all files
+to <code>/var/opt/UNIfw1doc/CPrules</code>.</p>
+
+<h2>How does UNIfw1doc work</h2>
+
+<p><strong>UNIfw1doc</strong> has two components:</p>
+
+<ul>
+<li> A SSL enabled Web Service (the server is part of the base operating system) for serving the documentation.</li>
+<li> An application that every 15 min. test for changes to the rule base and generates new documentation, while keeping track of all past changes and versions.</li>
+</ul>
+
+
+<p>Please notice that the documentation cannot be directly converted back to the firewall, and that all changes made within 15 min. is documented as one final change not a set of individual changes.</p>
+
+<h2>What not to expect from <strong>UNIfw1doc</strong></h2>
+
+<p><strong>UNIfw1doc</strong> is a simple <em>audit tool</em>, visualizing information already available through the firewall GUI, while keeping track of historical changes. It is not a tool for roll-back. It processes the available information and relies on it. If you do not trust your firewall administrator <strong>UNIfw1doc</strong> will not help you.</p>
+
+<h2>Using <strong>UNIfw1doc</strong></h2>
+
+<p><strong>UNIfw1doc</strong> is accessed though a browser with SSL on TCP port <strong>6789</strong> on the management station&rsquo;s IP address:</p>
+
+<pre><code>https://a.b.c.d:6789
+</code></pre>
+
+<p>The server uses the firewall&rsquo;s certificate (usually a <a href="http://en.wikipedia.org/wiki/Self-signed_certificate">self-signed SSL certificate</a> which will cause a browser warning).</p>
+
+<p>The <strong>main page</strong> shows documentation for each detected change, with the newest changes at the top. Each line in the table has tree links describing how the firewall was configured at a specific point in time.</p>
+
+<ul>
+<li>The <strong>Firewall Configuration</strong> (first field) links to the firewall configuration (rule base etc.)</li>
+<li>The <strong>Enforcement module status</strong> (second field) links to firewall version, IP and route info, installed rule base and installation time, while</li>
+<li>The <strong>Audit log</strong> (third field) shows the exported audit information.</li>
+</ul>
+
+
+<p><img src="assets/img/all.png" alt="Page layout" /></p>
+
+<p>The time stamp in the first column - Firewall configuration - links to a HTML version of the defined rule bases, with NAT, objects, users and administrators. The documentation is made with Check Point&rsquo;s Web Visualization Tool (see SK64501).</p>
+
+<p><img src="assets/img/webtool-main.png" alt="Firewall configuration" /></p>
+
+<p>The rule base may look like this example.</p>
+
+<p><img src="assets/img/rulebase.png" alt="Firewall filter rules (example)" /></p>
+
+<p>Configuration changes are tracked in the <em>audit log</em>, and the changes between different configurations are shown - exported to a HTML table.</p>
+
+<p>The minimum audit time is one day.</p>
+
+<p>The following information can usually be ignored:</p>
+
+<ul>
+<li>Automatic tasks done by the firewall software, where the column Machine is localhost.</li>
+<li>Automatic documentation by UNIfw1doc where the user i2audit logs in and out and column Machine is the management station.</li>
+</ul>
+
+
+<p><img src="assets/img/audit.png" alt="Audit log (example)" /></p>
+
+<p>The <em>firewall status</em> shows hostname, policy name, installation date, firewall software version, cluster status (for check point clusters) and a link to a page with the static routing.</p>
+
+<p><img src="assets/img/status.png" alt="Module status (example)" /></p>
+
+<p>Example of <em>static routing</em> on the <em>enforcement modules</em>.</p>
+
+<p><img src="assets/img/route.png" alt="Static routes (example)" /></p>
+
+<h2>Known problems and limitations</h2>
+
+<ul>
+<li>The Web Visualization Tool is made by Check Point and sets the limits for what can be visualized.</li>
+<li>If the servers certificate expires, changes (the path changes with major firewall upgrade) or the servers IP address changes, then the configuration for <strong>UNIfw1doc</strong> must be changed as well. The configuration file is <code>/var/opt/UNIf1doc/etc/cp_httpd.conf</code></li>
+</ul>
+
+
+<h2>How to solve problems</h2>
+
+<p>Please contact fwsupport@i2.dk in case of problems.</p>
+
+<h2>Note</h2>
+
+<p>UNI•C does not exist any more and the security devision has been transferred to
+DEiC/i2.dk logo and images has been updated accordingly together with new
+images showing cpdb2web not CPrules.</p>
+</body>
+</html>

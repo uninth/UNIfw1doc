@@ -1,0 +1,168 @@
+#!/bin/sh
+#
+# Copyright (c) 2012 UNI-C, NTH. All Rights Reserved
+#
+# chkconfig: 2345 55 25
+# description: Some DEiC i2 start up script
+#
+
+SN=fw1doc
+PKG=UNI${SN}
+PORT=6789
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+# Source CP specific configuration
+. /tmp/.CPprofile.sh
+
+# Source the rest
+. /home/admin/.bash_profile
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ]        && exit 1
+
+PROG=/web/cpshared/web/Apache/2.2.0/bin/httpd2
+
+SERVER=/web/cpshared/web/Apache/2.2.0/bin/httpd2
+
+PROD_DIR=/var/opt/$PKG
+
+RC=${PROD_DIR}/etc/${SN}
+
+CONFIG=${PROD_DIR}/etc/httpd2.conf
+IPADDR=${PROD_DIR}/etc/.listen_ip.txt
+
+ARGS=" -D FOREGROUND"
+
+
+case "$1" in
+	setup)
+		LOGDIRBASE=`df -P $FWDIR/log|awk '$1 != "Filesystem" { print $NF }'`
+		DATADIR=$LOGDIRBASE/$PKG/data
+		# Dirs: $FWDIR/log -> /var/log/UNIdoc/data
+		# data has to reside no the same partition as $FWDIR/log due to hardlinked logfiles
+		mkdir -p $DATADIR/html $DATADIR/logs $PROD_DIR/tmp $PROD_DIR/log
+		/bin/rm -f $PROD_DIR/data  # link?
+		ln -s $DATADIR $PROD_DIR/data
+		test -h $PROD_DIR/data/RGraph || ln -s $PROD_DIR/RGraph $PROD_DIR/data/RGraph
+
+		echo "made dir  $DATADIR"
+		echo "made link $PROD_DIR/data"
+
+		echo creating /etc/cron.d/${SN} ...
+		cat << EOF > /etc/cron.d/${SN}
+# document changes to firewall rulebases
+*/15 * * * * root [ -x /var/opt/$PKG/bin/mkfwdoc ] && /var/opt/$PKG/bin/mkfwdoc
+EOF
+		chmod 0640 /etc/cron.d/${DN}
+		chown root:root /etc/cron.d/${DN}
+		/etc/init.d/crond restart >/dev/null 2>&1
+
+		echo creating /etc/init.d/${SN} ...
+		/bin/cp ${PROD_DIR}/etc/${SN} /etc/init.d/${SN}
+		chkconfig --add ${SN}
+		chkconfig --list ${SN}
+
+		echo checking links ... 
+		for LINK in conf ismodules modules
+		do
+			if [ ! -h $PROD_DIR/data/$LINK ]; then
+				if [ ! -e  $PROD_DIR/data/$LINK ]; then
+					echo "creating sym link /web/$LINK $PROD_DIR/data/$LINK"
+					ln -s /web/$LINK $PROD_DIR/data/$LINK
+				else
+					echo "warn: $PROD_DIR/data/$LINK should be a link"
+				fi
+			fi
+		done
+
+		echo  "setting mode correctly ..."
+		(
+			cd $PROD_DIR;
+			echo "in $PROD_DIR ... "
+			find data/html CPrules bin cp_webviz_tool cpdb2web docs etc log tmp -type d	-exec  chmod 755 {} \;
+			find data/html etc log tmp -type f							-exec chmod 744 {} \;
+			find CPrules bin cp_webviz_tool cpdb2web etc/${SN} -type f	-exec chmod 755 {} \;
+
+			cd $LOGDIRBASE
+			echo "in $LOGDIRBASE .... "
+			find . -type d -exec chmod 0755 {} \;
+			echo "done"
+		)
+
+		echo "creating `basename ${CONFIG}` from `basename ${CONFIG}.tmpl` ... "
+
+		if [ -f "${IPADDR}" ]; then
+			LISTEN_IP="`cat ${IPADDR}`"
+			echo "found file ${IPADDR}"
+			echo "listen ip = $LISTEN_IP"
+		else
+			if [ -f "${CONFIG}" ]; then
+				LISTEN_IP=`sed " /^Listen/!d; s/^Listen//; s/:.*//; s/^[ \t]*//; s/[ \t]*$//; " ${CONFIG}`
+				echo ${LISTEN_IP} > ${IPADDR}
+			else
+				LISTEN_IP="127.0.0.1"
+			fi
+			echo "listen ip = $LISTEN_IP - please change in ${CONFIG}"
+		fi
+
+		SERVER_ROOT="/var/opt/${PKG}/data"
+		PID_FILE="/var/opt/${PKG}/tmp/httpd2.pid"
+		SBFILE="/var/opt/${PKG}/tmp/apache_runtime_status"
+		DOCUMENT_ROOT="/var/opt/${PKG}/data/html"
+		SERVER_NAME="`/bin/hostname`.`/bin/domainname`"
+
+		sed "
+			s%__SERVER_ROOT__%${SERVER_ROOT}%g;
+			s%__PID_FILE__%${PID_FILE}%g;
+			s%__SBFILE__%${SBFILE}%g;
+			s%__DOCUMENT_ROOT__%${DOCUMENT_ROOT}%g;
+			s%__SERVER_NAME__%${SERVER_NAME}%g;
+			s%__LISTEN_IP__%${LISTEN_IP}%g;
+			s%__PORT__%${PORT}%g;
+		" ${CONFIG}.tmpl > ${CONFIG}
+
+		/var/opt/$PKG/bin/mkfwdoc -f
+		/var/opt/$PKG/bin/mkfwdoc -i
+
+	;;
+		 start)	# Fix Apache Error #28 ¿ No space left on device which has nothing to do with
+				# space but turns out to be left over semaphore arrays see
+				# http://blog.ryantan.net/2010/04/apache-error-28-no-space-left-on-device/
+
+				NUMS=`ipcs -s | grep nobody|wc -l | tr -d ' '`
+
+				if [ "${NUMS}" -gt 50 ]; then
+					ipcs -s | grep nobody | perl -e 'while (<STDIN>) { @a=split(/\s+/); print `ipcrm sem $a[1]`}'
+				fi
+				$SERVER -k start -f $CONFIG $ARGS &
+                RETVAL=$?
+        ;;
+        stop)   pids=`ps -fe | sed "\%${SERVER}%!d; \%${CONFIG}%!d; /\\%/d " | awk '{ print $2 }'`
+		if [ -n  "$pids" ]; then
+			kill -9 $pids
+		fi
+                RETVAL=$?
+         ;;
+
+        status) pids=`ps -fe | sed "\%${SERVER}%!d; \%${CONFIG}%!d; /\\%/d " | awk '{ print $2 }'`
+		pids=`echo ${pids}`
+                case "${pids}" in
+                        "")     echo "$PROG not running"
+                        ;;
+                        *)      echo "$PKG is running on pid $pids"
+                        ;;
+                        esac
+        ;;
+        restart) $RC stop; $RC start
+        ;;
+        *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+esac
+
+exit 0

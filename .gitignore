@@ -1,0 +1,52 @@
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Vi files #
+############
+**/.*.sw[abcdefghijklmnop]
+**/*.bak
+
+# specific to UNItools
+*.o
+*.so
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Logs and databases #
+######################
+*.log
+*.sql
+*.sqlite
+
+**/tmp
+**/UNIha_rootdir
+src/GAiA/UNIha_rootdir
+**/obsolite
+/obsolite
+**/UNIfw1doc_rootdir
+**/*_rootdir
+
+**/not-on-git
+/not-on-git
+**/UNIfw1doc_rootdir
+/UNIfw1doc_rootdir
+*UNIfw1doc_rootdir*
+
+# Vi files #
+############
+**/*~
+**/*.bak
+**/*.sw[abcdefghijklmnop]
+
+###########
